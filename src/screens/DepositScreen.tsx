@@ -7,5 +7,3 @@ export default function DepositScreen() {
   return <View />;
 }
 
-
-
