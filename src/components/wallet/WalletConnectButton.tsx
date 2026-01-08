@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useWallet } from '../../state/wallet/WalletProvider';
 
@@ -19,13 +19,20 @@ export default function WalletConnectButton() {
     return (
       <View style={styles.container}>
         <Pressable
-          onPress={disconnect}
+          onPress={() =>
+            Alert.alert('Disconnect wallet?', undefined, [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Disconnect', style: 'destructive', onPress: disconnect },
+            ])
+          }
           style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
           accessibilityRole="button"
           accessibilityLabel="Connected wallet. Tap to disconnect."
         >
           <Text style={styles.address}>{truncateAddress(address)}</Text>
-          <Text style={styles.network}>{formatNetwork(chainId)}</Text>
+          <Text style={styles.network} numberOfLines={1} ellipsizeMode="tail">
+            {formatNetwork(chainId)}
+          </Text>
         </Pressable>
         <Text style={styles.disconnectHint}>Tap to disconnect</Text>
       </View>
@@ -61,13 +68,14 @@ function truncateAddress(value: string | null) {
 
 function formatNetwork(chainId: number | null) {
   if (!chainId) return 'Unknown';
-  if (chainId === 11155111) return 'Sepolia testnet';
   return `Chain ${chainId}`;
 }
 
 const styles = StyleSheet.create({
   container: {
     alignItems: 'flex-end',
+    alignSelf: 'flex-end',
+    maxWidth: 200,
   },
   button: {
     backgroundColor: '#facc15',
@@ -96,11 +104,13 @@ const styles = StyleSheet.create({
   },
   chip: {
     backgroundColor: '#0f172a',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
+    maxWidth: '100%',
+    alignSelf: 'flex-end',
   },
   chipPressed: {
     opacity: 0.85,
@@ -108,16 +118,20 @@ const styles = StyleSheet.create({
   address: {
     color: '#e2e8f0',
     fontWeight: '700',
+    flexShrink: 1,
   },
   network: {
     color: '#94a3b8',
     fontSize: 12,
-    marginLeft: 8,
+    marginLeft: 6,
+    maxWidth: 150,
+    flexShrink: 1,
   },
   disconnectHint: {
-    marginTop: 4,
+    marginTop: 6,
     color: '#94a3b8',
     fontSize: 11,
+    textAlign: 'right',
   },
   errorText: {
     marginTop: 6,
@@ -125,4 +139,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
+
 

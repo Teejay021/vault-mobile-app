@@ -8,12 +8,7 @@ import React, {
   useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-import {
-  connectMockWallet,
-  disconnectMockWallet,
-  resumeMockSession,
-} from '../../services/mockWalletProvider';
+import { useWalletConnectModal } from '@walletconnect/modal-react-native';
 
 type WalletState = {
   isConnected: boolean;
@@ -33,17 +28,16 @@ const WalletContext = createContext<WalletContextValue | undefined>(undefined);
 
 const STORAGE_KEY = '@tm-vault/wallet-session';
 
-const initialState: WalletState = {
-  isConnected: false,
-  address: null,
-  chainId: null,
-  isConnecting: false,
-  error: null,
-  isRestoring: true,
-};
-
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<WalletState>(initialState);
+  const { open, provider, isConnected, address } = useWalletConnectModal();
+  const [state, setState] = useState<WalletState>({
+    isConnected: false,
+    address: null,
+    chainId: null,
+    isConnecting: false,
+    error: null,
+    isRestoring: true,
+  });
 
   const persistSession = useCallback(async (address: string, chainId: number | null) => {
     const payload = JSON.stringify({ address, chainId });
@@ -57,69 +51,79 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(async () => {
     setState((prev) => ({ ...prev, isConnecting: true, error: null }));
     try {
-      const session = await connectMockWallet();
-      setState({
-        isConnected: true,
-        address: session.address,
-        chainId: session.chainId,
-        isConnecting: false,
-        error: null,
-        isRestoring: false,
-      });
-      await persistSession(session.address, session.chainId);
+      await open();
     } catch (err) {
       setState((prev) => ({
         ...prev,
-        isConnecting: false,
         error: formatError(err),
       }));
+    } finally {
+      setState((prev) => ({
+        ...prev,
+        isConnecting: false,
+      }));
     }
-  }, [persistSession]);
+  }, [open]);
 
   const disconnect = useCallback(async () => {
-    await disconnectMockWallet();
-    await clearSession();
-    setState({
-      ...initialState,
-      isRestoring: false,
-    });
+    try {
+      await provider?.disconnect();
+    } finally {
+      await clearSession();
+      setState((prev) => ({
+        ...prev,
+        isConnected: false,
+        address: null,
+        chainId: null,
+        error: null,
+      }));
+    }
   }, [clearSession]);
 
   useEffect(() => {
-    const restoreSession = async () => {
+    setState((prev) => ({ ...prev, isRestoring: false }));
+  }, []);
+
+  useEffect(() => {
+    setState((prev) => ({
+      ...prev,
+      isConnected,
+      address: address ?? null,
+    }));
+
+    if (__DEV__) {
+      console.log('WalletConnect state', {
+        isConnected,
+        address,
+      });
+    }
+
+    if (!isConnected) {
+      clearSession().catch(() => undefined);
+    }
+  }, [address, clearSession, isConnected]);
+
+  useEffect(() => {
+    if (!provider || !isConnected) {
+      setState((prev) => ({ ...prev, chainId: null }));
+      return;
+    }
+
+    const fetchChainId = async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (!raw) {
-          setState((prev) => ({ ...prev, isRestoring: false }));
-          return;
+        const raw = await provider.request({ method: 'eth_chainId' });
+        const chainId = normalizeChainId(raw);
+        setState((prev) => ({ ...prev, chainId }));
+        if (address) {
+          await persistSession(address, chainId);
         }
-
-        const parsed: { address?: string; chainId?: number } = JSON.parse(raw);
-        const session = await resumeMockSession({
-          address: parsed.address,
-          chainId: parsed.chainId ?? null,
-        });
-
-        setState({
-          isConnected: true,
-          address: session.address,
-          chainId: session.chainId,
-          isConnecting: false,
-          error: null,
-          isRestoring: false,
-        });
       } catch (err) {
-        await clearSession();
-        setState({
-          ...initialState,
-          isRestoring: false,
-          error: formatError(err),
-        });
+        setState((prev) => ({ ...prev, error: formatError(err) }));
       }
     };
 
-    restoreSession();
-  }, [clearSession]);
+    fetchChainId();
+  }, [address, isConnected, persistSession, provider]);
 
   const value = useMemo(
     () => ({
@@ -142,7 +146,24 @@ export function useWallet() {
 }
 
 function formatError(err: unknown) {
-  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null) {
+    const anyErr = err as { code?: string; error?: string; message?: string };
+    if (anyErr.code && anyErr.error) return `${anyErr.code}: ${anyErr.error}`;
+    if (anyErr.message) return anyErr.message;
+  }
   if (typeof err === 'string') return err;
   return 'Something went wrong while connecting your wallet.';
+}
+
+function normalizeChainId(value: unknown): number | null {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('0x')) {
+      return Number.parseInt(trimmed, 16);
+    }
+    const asNumber = Number.parseInt(trimmed, 10);
+    return Number.isNaN(asNumber) ? null : asNumber;
+  }
+  return null;
 }

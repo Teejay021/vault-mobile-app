@@ -1,11 +1,16 @@
 import React from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { NavigationProp, useNavigation } from '@react-navigation/native';
 
 import WalletConnectButton from '../components/wallet/WalletConnectButton';
+import VaultCard from '../components/vaults/VaultCard';
+import { vaults } from '../config/vaults';
+import { RootStackParamList } from '../navigation/types';
 import { useWallet } from '../state/wallet/WalletProvider';
 
 export default function VaultsScreen() {
   const { isRestoring, isConnected, chainId, address } = useWallet();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
 
   return (
     <View style={styles.container}>
@@ -24,16 +29,27 @@ export default function VaultsScreen() {
             <Text style={styles.loadingText}>Restoring your wallet session...</Text>
           </View>
         ) : (
-          <View style={styles.placeholderCard}>
-            <Text style={styles.placeholderTitle}>
-              {isConnected ? 'Vaults go here next' : 'Connect to get started'}
-            </Text>
-            <Text style={styles.placeholderBody}>
-              {isConnected
-                ? `Connected as ${address ?? ''} on chain ${chainId ?? 'unknown'}.`
-                : 'Tap Connect Wallet to link Privy or WalletConnect.'}
-            </Text>
-          </View>
+          <>
+            <View style={styles.cardsWrapper}>
+              {vaults.map((vault) => (
+                <VaultCard
+                  key={vault.id}
+                  vault={vault}
+                  onPress={() => navigation.navigate('VaultDetail', { vaultId: vault.id })}
+                />
+              ))}
+            </View>
+            <View style={styles.placeholderCard}>
+              <Text style={styles.placeholderTitle}>
+                {isConnected ? 'Connected' : 'Connect to get started'}
+              </Text>
+              <Text style={styles.placeholderBody}>
+                {isConnected
+                  ? `Address: ${address ?? ''}\nChain: ${chainId ?? 'unknown'}`
+                  : 'Tap Connect Wallet to link your wallet.'}
+              </Text>
+            </View>
+          </>
         )}
       </ScrollView>
     </View>
@@ -65,6 +81,9 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     paddingBottom: 40,
+  },
+  cardsWrapper: {
+    marginBottom: 16,
   },
   loadingRow: {
     flexDirection: 'row',
